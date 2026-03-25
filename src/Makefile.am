@@ -1,16 +1,18 @@
 bin_PROGRAMS = qperf
 
 if RDMA
-AM_CFLAGS = -Wall -O -DRDMA
+AM_CFLAGS = -Wall -O -DRDMA -Wno-unused-result
 if HAS_XRC
 AM_CFLAGS += -DHAS_XRC=1
 endif
 qperf_SOURCES = qperf.c socket.c rds.c rdma.c support.c help.c qperf.h
 qperf_LDADD = -libverbs
 else
-AM_CFLAGS = -Wall -O
+AM_CFLAGS = -Wall -O -Wno-unused-result
 qperf_SOURCES = qperf.c socket.c rds.c support.c help.c qperf.h
 endif
+
+EXTRA_DIST = help.txt mkhelp mkman
 
 man_MANS = qperf.1
 

@@ -1,0 +1,93 @@
+name: Build EL10 RPM
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      release_name:
+        description: 'Release name (e.g. v0.4.10)'
+        required: true
+        default: ''
+      draft:
+        description: 'Create as draft release'
+        type: boolean
+        default: true
+
+jobs:
+  build-rpm:
+    name: Build RPM for EL10
+    runs-on: ubuntu-latest
+    container:
+      image: almalinux:10
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          dnf install -y \
+            autoconf \
+            automake \
+            gcc \
+            make \
+            perl-diagnostics \
+            libibverbs-devel \
+            librdmacm-devel \
+            rpm-build \
+            rpmdevtools \
+            tar
+
+      - name: Set up RPM build tree
+        run: rpmdev-setuptree
+
+      - name: Generate configure script
+        run: ./autogen.sh
+
+      - name: Configure (generates spec and Makefiles)
+        run: ./configure
+
+      - name: Create source tarball
+        run: make dist
+
+      - name: Get version
+        id: version
+        run: |
+          echo "VERSION=$(grep 'AC_INIT' configure.ac | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')" >> "$GITHUB_OUTPUT"
+
+      - name: Copy source tarball to SOURCES
+        run: |
+          cp qperf-${{ steps.version.outputs.VERSION }}.tar.gz ~/rpmbuild/SOURCES/
+
+      - name: Build RPM
+        run: |
+          rpmbuild -ba qperf.spec \
+            --define "_topdir ${HOME}/rpmbuild" \
+            --define "_sourcedir ${HOME}/rpmbuild/SOURCES"
+
+      - name: Upload binary RPM
+        uses: actions/upload-artifact@v4
+        with:
+          name: qperf-el10-rpm
+          path: ~/rpmbuild/RPMS/**/*.rpm
+          if-no-files-found: error
+
+      - name: Upload source RPM
+        uses: actions/upload-artifact@v4
+        with:
+          name: qperf-el10-srpm
+          path: ~/rpmbuild/SRPMS/**/*.rpm
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: github.event_name == 'workflow_dispatch' && inputs.release_name != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_name }}
+          name: ${{ inputs.release_name }}
+          draft: ${{ inputs.draft }}
+          files: ~/rpmbuild/RPMS/*/qperf-[0-9]*.rpm
+
